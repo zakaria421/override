@@ -1,0 +1,29 @@
+Level00 - Walkthrough
+=====================
+
+1) Recon
+- Connected to VM with SSH on port `4242`.
+- Located challenge binary `./level00` in the home directory.
+
+2) Reverse engineering
+- Disassembled binary:
+	- `objdump -d ./level00 > /tmp/level00.asm`
+- Read `main` and reconstructed equivalent C logic.
+- Found that program validates user input against a constant stored in hex.
+- Converted hex constant to decimal, resulting in: `5276`.
+
+3) Exploitation / authentication
+- Ran binary with computed value:
+	- `./level00 5276`
+- Program printed authenticated message and spawned a privileged shell.
+
+4) Retrieve next level password
+- From the spawned shell, read next user password file:
+	- `cat /home/users/level01/.pass`
+- Retrieved password:
+	- `uSq2ehEGT6c9S24zbshexZQBXUGrncxn5sD5QfGL`
+
+5) Validation
+- Switched account to confirm access:
+	- `su level01`
+- Pasted retrieved password and confirmed successful login.
