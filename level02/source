@@ -1,10 +1,59 @@
-Level 2 - Source Analysis
-==========================
+Level02 - Source Analysis
+=========================
 
-Binary name:
-Protection summary (checksec):
-Vulnerability type:
-Root cause:
+Binary
+------
+- `./level02`
 
-Simplified code/path explanation:
+Environment validation
+----------------------
+- Real challenge binary path: `/home/users/level02/level02`
+- Permissions: SUID/SGID to `level03` (`-rwsr-s---`)
+
+Observed behavior
+-----------------
+1. Program reads secret from `/home/users/level03/.pass` into a local stack buffer.
+2. Prompts for username and password.
+3. Compares typed password with loaded file content (`strncmp(..., 41)`).
+4. On mismatch, executes `printf(username)`.
+
+Vulnerability type
+------------------
+- Format string vulnerability in failure branch.
+
+Root cause
+----------
+- User-controlled input is used as a format string:
+	- `printf(username);`
+- Correct safe pattern would be:
+	- `printf("%s", username);`
+
+Why this is exploitable
+-----------------------
+- `printf` format directives like `%N$lx` read stack values.
+- The secret password buffer (`file_content`) is on stack in the same frame.
+- By probing stack positions, attacker leaks 64-bit words containing password bytes.
+
+Exploit strategy used
+---------------------
+1. Trigger failure path intentionally with wrong password.
+2. Use username payload `%N$lx` to leak stack words by index.
+3. Enumerate indices and decode leaked 64-bit hex words as little-endian bytes.
+4. Reconstruct password chunks from contiguous indices.
+
+Recovered indices and values
+----------------------------
+- `22: 756e505234376848` -> `Hh74RPnu`
+- `23: 45414a3561733951` -> `Q9sa5JAE`
+- `24: 377a7143574e6758` -> `XgNWCqz7`
+- `25: 354a35686e475873` -> `sXGnh5J5`
+- `26: 48336750664b394d` -> `M9KfPg3H`
+
+Final reconstructed password
+----------------------------
+- `Hh74RPnuQ9sa5JAEXgNWCqz7sXGnh5J5M9KfPg3H`
+
+Outcome
+-------
+- Password used to authenticate as `level03`.
 
