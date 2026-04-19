@@ -1,10 +1,65 @@
-Level 1 - Source Analysis
-==========================
+Level01 - Source Analysis
+=========================
 
-Binary name:
-Protection summary (checksec):
-Vulnerability type:
-Root cause:
+Binary name
+-----------
+- `./level01`
 
-Simplified code/path explanation:
+Protection summary
+------------------
+- NX: enabled
+- Stack canary: not found
+- PIE: disabled
+
+Vulnerability type
+------------------
+- Stack-based buffer overflow in password input handling.
+- Authentication logic bug that makes normal success path unreachable.
+
+Root cause
+----------
+1. `main` reads password with `fgets(password_buffer, 100, stdin)` into a 64-byte stack buffer.
+2. The password verification branch is malformed: a correct compare result still goes to failure.
+3. Because NX is enabled, injected shellcode on stack is not executable.
+4. Because canary is missing and saved return address is reachable, control-flow hijack is possible.
+
+Simplified control-flow explanation
+----------------------------------
+```c
+char password_buffer[64];
+fgets(password_buffer, 100, stdin); // overflow
+
+res = verify_user_pass(password_buffer);
+
+if (res == 0) {
+		goto fail; // wrong branch: correct password should not fail
+}
+
+if (res == 0) {
+		return 0;  // unreachable success path
+}
+
+fail:
+puts("Login Failed");
+return 1;
+```
+
+Exploit strategy chosen
+-----------------------
+- Since normal login cannot succeed, use overflow to overwrite saved return address.
+- Since NX blocks shellcode, use ret2libc:
+	- return to `system`
+	- next return to `exit`
+	- pass pointer to `"/bin/sh"` as argument to `system`
+
+Recovered exploit values
+------------------------
+- Offset to saved EIP: `80`
+- `system`: `0xf7e6aed0`
+- `exit`: `0xf7e5eb70`
+- `"/bin/sh"`: `0xf7f897ec`
+
+Outcome
+-------
+- Ret2libc chain spawns shell and allows reading `/home/users/level02/.pass`.
 
