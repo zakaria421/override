@@ -1,10 +1,63 @@
-Level 3 - Source Analysis
-==========================
+Level03 - Source Analysis
+=========================
 
-Binary name:
-Protection summary (checksec):
-Vulnerability type:
-Root cause:
+Binary
+------
+- `./level03`
 
-Simplified code/path explanation:
+Protection summary
+------------------
+- Partial RELRO
+- Stack canary found
+- NX enabled
+- No PIE
+
+Challenge type
+--------------
+- Logic/math + reversible XOR decryption (no memory corruption required).
+
+Root behavior
+-------------
+1. `main` reads one integer from user.
+2. Calls `test(user_input, 0x1337d00d)`.
+3. `test` computes:
+	- `diff = 0x1337d00d - user_input`
+4. If `diff <= 0x15`, calls `decrypt(diff)`.
+5. `decrypt` XOR-decodes a static local buffer with `key = diff`.
+6. Decoded result is compared against target string (`"Congratulations!"`).
+7. On match, executes `system("/bin/sh")`.
+
+Why key is `0x12`
+-----------------
+Given XOR property:
+- `decoded = encoded ^ key`
+- therefore `key = encoded ^ decoded`
+
+From the encoded buffer first byte:
+- encoded byte = `0x51`
+From target first char `C`:
+- decoded byte = `0x43`
+
+Compute key:
+- `0x51 ^ 0x43 = 0x12`
+
+So required decrypt key is `0x12` (decimal `18`).
+
+Input equation
+--------------
+Need:
+- `diff = 0x12`
+
+Since:
+- `diff = 0x1337d00d - user_input`
+
+Then:
+- `user_input = 0x1337d00d - 0x12`
+- `user_input = 0x1337cffb`
+- decimal input = `322424827`
+
+Outcome
+-------
+- Input `322424827` triggers successful compare and spawns shell.
+- Next level password recovered from `/home/users/level04/.pass`.
 

