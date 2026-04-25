@@ -3,17 +3,56 @@ Level 6 - Walkthrough
 
 1) Recon
 - Files discovered:
+	- `/home/users/level06/level06`
+	- local reconstruction: `level06/Ressources/code.c`
+	- helper calculator: `level06/Ressources/main.c`
 - Useful commands used:
+	- `objdump -d /home/users/level06/level06`
+	- reverse/reading `auth()` logic from disassembly
+	- compile helper: `gcc main.c -o calc_serial`
 
 2) Vulnerability confirmation
 - What is vulnerable:
+	- Authentication is deterministic and based only on login.
 - Why it is exploitable:
+	- No hidden secret is mixed into serial validation.
+	- We can reimplement the same algorithm and compute valid serial ourselves.
 
 3) Exploitation steps
-- Exact command sequence:
+- Step A - Rebuild algorithm from `auth()`:
+	- Strip newline from login.
+	- Require length > 5.
+	- Initial key from login[3].
+	- Per-char update with XOR and `% 0x539`.
+
+- Step B - Implement calculator (done in `level06/Ressources/main.c`) and compute serial for chosen login.
+
+- Step C - Use same login + computed serial in target binary:
+
+	```bash
+	/home/users/level06/level06
+	# Enter Login: <your_login>
+	# Enter Serial: <computed_serial>
+	```
+
+- Step D - On success, shell opens as `level06`; read next password:
+
+	```bash
+	cat /home/users/level07/.pass
+	```
+
 - Payload used:
+	- Login string (length >= 6)
+	- Computed serial from helper program
 
 4) Result
 - Retrieved next password from:
-- Notes for defense/evaluation:
+	- `/home/users/level07/.pass`
+- Recovered value:
+	- `GbcPDRgsFK77LNnnuh7QyFYA2942Gp8yKj9KrWD8`
+
+5) Notes for defense/evaluation:
+- Anti-debugging (`ptrace`) is not enough if auth formula is reversible.
+- Fix by using server-side secret/HMAC or cryptographic verification.
+- Avoid deriving valid credentials entirely from user-controlled input.
 

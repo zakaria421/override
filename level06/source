@@ -1,10 +1,62 @@
 Level 6 - Source Analysis
 ==========================
 
-Binary name:
-Protection summary (checksec):
+Binary name: level06
+
+Protection summary:
+- 32-bit ELF binary
+- Stack canary present (seen via `__stack_chk_fail@plt`)
+- No direct buffer overflow route used in this solve
+
 Vulnerability type:
+- Logic/authentication challenge (re-implementation attack)
+
 Root cause:
+- Authentication does not require secret server-side material.
+- Final serial is fully derived from user-controlled login using deterministic math in `auth()`.
+- Therefore attacker can reproduce same computation offline and generate valid serial for any accepted login.
 
 Simplified code/path explanation:
+
+1) `main()` reads:
+	- `login` with `fgets(login, 0x20, stdin)`
+	- `serial` with `scanf("%u", &serial)`
+
+2) `auth(login, serial)` does:
+	- remove trailing newline: `login[strcspn(login, "\n")] = '\0'`
+	- `len = strnlen(login, 32)`
+	- reject if `len <= 5`
+	- anti-debug check: `ptrace(PTRACE_TRACEME, ...) == -1` => reject
+	- initialize key:
+	  `key = ((signed char)login[3] ^ 0x1337) + 0x5eeded`
+	- for each character:
+	  - reject if char <= 31
+	  - update:
+		 `key += ((signed char)login[i] ^ key) % 0x539`
+	- accept only if `serial == key`
+
+3) On success (`auth == 0`):
+	- prints success message
+	- executes `system("/bin/sh")`
+
+
+Why the attack works:
+- The serial formula is entirely inside client binary logic.
+- By copying the same loop/math in a helper program (`level06/Ressources/main.c`), we compute valid serial directly.
+- Then we enter matching login + computed serial in `level06` and get shell as `level06`.
+
+
+Serial formula (exact):
+
+```
+key = ((signed char)login[3] ^ 0x1337) + 0x5eeded
+for each char c in login:
+	 if c <= 31: reject
+	 key += ( (signed char)c ^ key ) % 0x539
+```
+
+
+Notes:
+- `ptrace` anti-debug only blocks running under debugger; it does not stop offline reimplementation.
+- This is not memory corruption exploitation; it is authentication logic inversion.
 

@@ -1,10 +1,60 @@
 Level 8 - Source Analysis
 ==========================
 
-Binary name:
-Protection summary (checksec):
+Binary name: level08
+
+Protection summary:
+- 64-bit ELF binary
+- Stack canary present (`__stack_chk_fail` in `main`/`log_wrapper`)
+- Uses standard libc file/path APIs (`fopen`, `open`, `strcpy`, `strncat`, `write`)
+
 Vulnerability type:
+- Path traversal + unsafe path composition
+
 Root cause:
+- User-controlled argument `argv[1]` is used directly in two sensitive operations:
+  1) source read path: `fopen(argv[1], "r")`
+  2) destination write path: `"./backups/" + argv[1]`
+- No sanitization/canonicalization of `argv[1]` (`..`, absolute paths, traversal).
+- Therefore attacker can influence both what file is read and where backup is written.
 
 Simplified code/path explanation:
+
+1) `main(argc, argv)` expects one filename argument.
+
+2) Opens log file:
+	- `./backups/.log`
+
+3) Logs start event via `log_wrapper(log_file, argv[1], START_NOTE)`.
+
+4) Opens user-chosen source file:
+	- `input_file = fopen(argv[1], "r")`
+
+5) Builds output path:
+	- `output_path = "./backups/"`
+	- `strncat(output_path, argv[1], 0x63 - strlen(output_path))`
+
+6) Opens output with create+exclusive and copies source byte-by-byte.
+
+7) Logs finish event and closes descriptors.
+
+
+Why exploit works:
+- Relative path resolution depends on current working directory (cwd).
+- By running binary from `/tmp`, attacker controls `./backups/...` destination tree.
+- With `argv[1] = ../home/users/level09/.pass`:
+  - read side resolves to `/home/users/level09/.pass`
+  - write side resolves to `/tmp/home/users/level09/.pass`
+- Secret content is copied from protected location into attacker-readable file.
+
+
+About `log_wrapper`:
+- `strcpy(log_buffer, name)` is also unsafe and can overflow local buffer if name is large.
+- In this level, traversal-based file copy is the straightforward solve path.
+
+
+Security lesson:
+- Never concatenate untrusted path input into privileged file operations.
+- Validate with canonical paths (`realpath`) and enforce allowed base directory.
+- Reject traversal tokens (`..`) and absolute paths when not needed.
 

