@@ -1,46 +1,22 @@
-Level00 - Source Analysis
-=========================
-
-Binary: `./level00`
-
-Method used
------------
-1. Disassembled the binary with:
-   - `objdump -d ./level00`
-2. Located the `main` logic and translated it to equivalent C-like logic.
-3. Identified the comparison against a constant hex value.
-4. Converted that hex value to decimal.
-5. Used the decimal value as argument to the binary.
-
-Simplified C-like logic
------------------------
-```c
 #include <stdio.h>
 #include <stdlib.h>
 
-int main() {
-    puts("String at 0x80485f0");
-    puts("String at 0x8048614");
-    puts("String at 0x80485f0");
-    printf("String at 0x804862c");
+int main(void) {
+    int passcode;
 
-    int input;
-    scanf("String at 0x8048636", &input);
+    puts("***********************************");
+    puts("*            level00             *");
+    puts("***********************************");
 
-    if (input == 0x149c) {
-        puts("String at 0x8048639");
-        system("String at 0x8048649");
+    printf("Enter passcode: ");
+    scanf("%d", &passcode);
+
+    if (passcode == 0x149c) {
+        puts("Authenticated!");
+        system("/bin/sh");
         return 0;
-    } else {
-        puts("String at 0x8048651");
-        return 1;
     }
+
+    puts("Invalid passcode.");
+    return 1;
 }
-```
- 0x149c in decimal is `5276`.
-Result
-------
-- Correct authentication code: `5276`
-
-
-
