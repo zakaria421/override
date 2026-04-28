@@ -70,9 +70,6 @@ cat ) | ./level01
 - Read next password:
 	- `cat /home/users/level02/.pass`
 
-Notes for defense/evaluation
+ret2libc + stack overflow
 ----------------------------
-- Explain why correct password alone cannot succeed (logic bug).
-- Explain why shellcode was not used (NX enabled).
-- Explain why ret2libc works (reuse libc + controllable saved EIP).
-
+ret2libc (return-to-libc) is a technique used in binary exploitation where, instead of injecting your own code, you reuse existing functions from the C standard library (libc) to gain control. In a typical stack buffer overflow, the attacker overwrites the return address (EIP) with the address of a libc function like system(), and arranges the stack so it receives a valid argument such as the address of the string "/bin/sh". When the function returns, execution jumps to system("/bin/sh"), giving a shell. This works especially when protections like NX (non-executable stack) prevent running injected shellcode, so the attacker “borrows” code that’s already in memory instead.
