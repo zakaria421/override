@@ -13,6 +13,37 @@ ls -l /home/users/level02/level02
 file /home/users/level02/level02
 ```
 
+Observed behavior
+-----------------
+1. Program reads secret from `/home/users/level03/.pass` into a local stack buffer.
+2. Prompts for username and password.
+3. Compares typed password with loaded file content (`strncmp(..., 41)`).
+4. On mismatch, executes `printf(username)`.
+
+Vulnerability type
+------------------
+- Format string vulnerability in failure branch.
+
+Root cause
+----------
+- User-controlled input is used as a format string:
+	- `printf(username);`
+- Correct safe pattern would be:
+	- `printf("%s", username);`
+
+Why this is exploitable
+-----------------------
+- `printf` format directives like `%N$lx` read stack values.
+- The secret password buffer (`file_content`) is on stack in the same frame.
+- By probing stack positions, attacker leaks 64-bit words containing password bytes.
+
+Exploit strategy used
+---------------------
+1. Trigger failure path intentionally with wrong password.
+2. Use username payload `%N$lx` to leak stack words by index.
+3. Enumerate indices and decode leaked 64-bit hex words as little-endian bytes.
+4. Reconstruct password chunks from contiguous indices.
+
 2) Vulnerability confirmation
 -----------------------------
 - Triggered normal failure path with dummy inputs.

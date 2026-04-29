@@ -1,7 +1,5 @@
 # Level05 (Override) — In-Depth Walkthrough
 
-This walkthrough explains the reasoning behind your Level05 solution: what the vulnerability is, how it is identified from the binary/disassembly, and why your 3-stage payload works reliably.
-
 ---
 
 ## 1) Vulnerability overview

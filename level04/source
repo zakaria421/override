@@ -1,60 +1,84 @@
-Level 4 - Source Analysis
-==========================
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/ptrace.h>
+#include <sys/prctl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-Binary name: level04
+extern char *gets(char *);
 
-Protection summary:
-- 32-bit ELF, setuid challenge binary
-- Stack canary: not present
-- NX: disabled (stack is executable)
-- PIE: disabled (binary text addresses stable)
+static void clear_stdin(void) {
+    int character;
 
-Vulnerability type:
-- Stack-based buffer overflow via gets()
+    do {
+        character = getchar();
+    } while (character != '\n' && character != EOF);
+}
 
-Root cause:
-- In child process, user input is read with gets() into a fixed-size local buffer:
-	char user_buffer[128];
-	gets(user_buffer);
-- gets() has no length check, so input can overwrite saved EIP.
+static unsigned int get_unum(void) {
+    unsigned int value;
 
-Main control-flow (important points):
-1) main() forks.
-2) Child:
-	 - prctl(PR_SET_PDEATHSIG, SIGHUP)
-	 - ptrace(PTRACE_TRACEME, ...)
-	 - puts("Give me some shellcode, k")
-	 - gets(user_buffer)
-3) Parent:
-	 - wait() loop + ptrace(PTRACE_PEEKUSER, child, 44, 0)
-	 - if traced syscall == 11 (execve), prints "no exec() for you" and kills child.
+    value = 0;
+    fflush(stdout);
+    scanf("%u", &value);
+    clear_stdin();
+    return value;
+}
 
-Offset calculation (why 156):
-- From disassembly, gets buffer starts at ebp-0x98.
-- Saved return address is at ebp+0x4.
-- Distance to overwrite EIP:
-	(ebp+0x4) - (ebp-0x98) = 0x9c = 156 bytes.
+static void prog_timeout(int signal_number) {
+    (void)signal_number;
+    _exit(1);
+}
 
-Exploit strategy used here (ret2libc):
-- Overwrite EIP with system() address.
-- Set next return to exit().
-- Pass "/bin/sh" pointer from libc as system() first argument.
+static void enable_timeout_cons(void) {
+    signal(SIGALRM, prog_timeout);
+    alarm(60);
+}
 
-Stack layout after overflow:
-- [156 bytes padding]
-- [EIP -> system]
-- [RET for system -> exit]
-- [arg1 for system -> "/bin/sh"]
+int main(void) {
+    pid_t child_pid;
+    int wait_status;
+    long traced_syscall;
+    char input_buffer[128];
 
-Addresses collected in gdb session:
-- system = 0xf7e6aed0
-- exit   = 0xf7e5eb70
-- "/bin/sh" = 0xf7f897ec
+    child_pid = fork();
+    traced_syscall = 0;
+    wait_status = 0;
 
-Payload used:
-python -c 'import struct,sys; sys.stdout.write("A"*156 + struct.pack("<I",0xf7e6aed0) + struct.pack("<I",0xf7e5eb70) + struct.pack("<I",0xf7f897ec) + "\n")'
+    for (unsigned int index = 0; index < 128; index++) {
+        input_buffer[index] = '\0';
+    }
 
-Notes:
-- '; cat' was appended in pipeline to keep stdin open for interactive shell behavior.
-- If execve filtering blocks this path on a specific run/environment, use ORW shellcode (open/read/write .pass) to avoid syscall 11.
+    if (child_pid == 0) {
+        prctl(PR_SET_PDEATHSIG, SIGHUP);
+        ptrace(PTRACE_TRACEME, 0, 0, 0);
+        puts("Give me some shellcode, k");
+        gets(input_buffer);
+        return 0;
+    }
 
+    while (1) {
+        wait(&wait_status);
+
+        if ((wait_status & 0x7f) == 0) {
+            puts("child is exiting...");
+            break;
+        }
+
+        if ((((wait_status & 0x7f) + 1) >> 1) > 0) {
+            puts("child is exiting...");
+            break;
+        }
+
+        traced_syscall = ptrace(PTRACE_PEEKUSER, child_pid, 44, 0);
+        if (traced_syscall == 11) {
+            puts("no exec() for you");
+            kill(child_pid, SIGKILL);
+            break;
+        }
+    }
+
+    return 0;
+}

@@ -1,0 +1,19 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    char input_buffer[100] = {0};
+    size_t index;
+
+    fgets(input_buffer, sizeof(input_buffer), stdin);
+
+    for (index = 0; index < strlen(input_buffer); index++) {
+        if (input_buffer[index] > '@' && input_buffer[index] <= 'Z') {
+            input_buffer[index] ^= 0x20; //turns to lowercase
+        }
+    }
+
+    printf(input_buffer);
+    exit(0);
+}
