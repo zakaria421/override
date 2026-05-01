@@ -1,6 +1,9 @@
 Level 6 - Walkthrough
 ========================
 
+Vulnerability type:
+- Logic/authentication challenge (re-implementation attack)
+
 1) Recon
 - Files discovered:
 	- `/home/users/level06/level06`

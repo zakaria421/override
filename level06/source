@@ -1,62 +1,104 @@
-Level 6 - Source Analysis
-==========================
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/ptrace.h>
+#include <unistd.h>
 
-Binary name: level06
+static void clear_stdin(void) {
+    int character;
 
-Protection summary:
-- 32-bit ELF binary
-- Stack canary present (seen via `__stack_chk_fail@plt`)
-- No direct buffer overflow route used in this solve
+    do {
+        character = getchar();
+    } while (character != '\n' && character != EOF);
+}
 
-Vulnerability type:
-- Logic/authentication challenge (re-implementation attack)
+static unsigned int get_unum(void) {
+    unsigned int value;
 
-Root cause:
-- Authentication does not require secret server-side material.
-- Final serial is fully derived from user-controlled login using deterministic math in `auth()`.
-- Therefore attacker can reproduce same computation offline and generate valid serial for any accepted login.
+    value = 0;
+    fflush(stdout);
+    scanf("%u", &value);
+    clear_stdin();
+    return value;
+}
 
-Simplified code/path explanation:
+static void prog_timeout(int signal_number) {
+    (void)signal_number;
+    _exit(1);
+}
 
-1) `main()` reads:
-	- `login` with `fgets(login, 0x20, stdin)`
-	- `serial` with `scanf("%u", &serial)`
+static void enable_timeout_cons(void) {
+    signal(SIGALRM, prog_timeout);
+    alarm(60);
+}
 
-2) `auth(login, serial)` does:
-	- remove trailing newline: `login[strcspn(login, "\n")] = '\0'`
-	- `len = strnlen(login, 32)`
-	- reject if `len <= 5`
-	- anti-debug check: `ptrace(PTRACE_TRACEME, ...) == -1` => reject
-	- initialize key:
-	  `key = ((signed char)login[3] ^ 0x1337) + 0x5eeded`
-	- for each character:
-	  - reject if char <= 31
-	  - update:
-		 `key += ((signed char)login[i] ^ key) % 0x539`
-	- accept only if `serial == key`
+static int auth(char *login, unsigned int serial) {
+    size_t login_len;
+    uint32_t hash;
+    size_t index;
 
-3) On success (`auth == 0`):
-	- prints success message
-	- executes `system("/bin/sh")`
+    login[strcspn(login, "\n")] = '\0';
+    login_len = strnlen(login, 32);
+    if (login_len <= 5) {
+        return 1;
+    }
 
+    if (ptrace(PTRACE_TRACEME, 0, 1, 0) == -1) {
+        puts(".---------------------------.");
+        puts("| !! TAMPERING DETECTED !!  |");
+        puts("'---------------------------'");
+        return 1;
+    }
 
-Why the attack works:
-- The serial formula is entirely inside client binary logic.
-- By copying the same loop/math in a helper program (`level06/Ressources/main.c`), we compute valid serial directly.
-- Then we enter matching login + computed serial in `level06` and get shell as `level06`.
+    hash = ((uint32_t)(unsigned char)login[3] ^ 0x1337U) + 0x5eededU;
+    printf("hash: %u\n", hash);
+    for (index = 0; index < login_len; index++) {
+        unsigned char current;
+        uint32_t mixed;
 
+        current = (unsigned char)login[index];
+        if (current <= 31U) {
+            return 1;
+        }
 
-Serial formula (exact):
+        mixed = ((uint32_t)(signed char)current) ^ hash;
+        hash += mixed % 1337U;
+    }
+printf("serial: %u\n", serial);
+printf("hash: %u\n", hash);
+    if (serial != hash) {
+        return 1;
+    }
 
-```
-key = ((signed char)login[3] ^ 0x1337) + 0x5eeded
-for each char c in login:
-	 if c <= 31: reject
-	 key += ( (signed char)c ^ key ) % 0x539
-```
+    return 0;
+}
 
+int main(void) {
+    char login[32];
+    unsigned int serial;
 
-Notes:
-- `ptrace` anti-debug only blocks running under debugger; it does not stop offline reimplementation.
-- This is not memory corruption exploitation; it is authentication logic inversion.
+    memset(login, 0, sizeof(login));
+    serial = 0;
 
+    puts("***********************************");
+    puts("*\t\tlevel06\t\t*");
+    puts("***********************************");
+    printf("-> Enter Login: ");
+    fgets(login, sizeof(login), stdin);
+
+    puts("***********************************");
+    puts("***** NEW ACCOUNT DETECTED ********");
+    puts("***********************************");
+    printf("-> Enter Serial: ");
+    scanf("%u", &serial);
+
+    if (auth(login, serial) == 0) {
+        puts("Authenticated!");
+        system("/bin/sh");
+        return 0;
+    }
+
+    return 1;
+}

