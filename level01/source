@@ -5,7 +5,7 @@ static char g_user_name[0x100];
 
 static int verify_user_name(void) {
     puts("verifying username....\n");
-    return strncmp("level01", g_user_name, 7);
+    return strncmp("dat_wil", g_user_name, 7);
 }
 
 static int verify_user_pass(const char *input) {

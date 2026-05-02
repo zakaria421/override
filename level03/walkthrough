@@ -61,9 +61,4 @@ cat /home/users/level04/.pass
 - Retrieved value stored in `level03/flag`:
 	- `kgv3tkEb9h2mLkRsPkXRfc2mHbjMxQzvb2FrgKkf`
 
-Notes for defense/evaluation
-----------------------------
-- Explain why this level is logic/math, not memory corruption.
-- Explain XOR-key derivation and equation solving clearly.
-- Be ready to justify `0x12` derivation from encoded and target bytes.
 

@@ -84,10 +84,3 @@ Concatenated password:
 su level03
 whoami
 ```
-
-Notes for defense/evaluation
-----------------------------
-- Explain why `%lx` leaks stack words.
-- Explain little-endian decode (hex word -> bytes -> text).
-- Explain why probing by index is stable and cleaner than very long single payloads.
-

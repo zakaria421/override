@@ -80,9 +80,3 @@ Payload layout:
 - Recovered value:
 	3v8QLcN5SAhPaZZfEasfmXdwyR59ktDEMAwHF3aN
 
-
-5) Notes for defense/evaluation
-- Primary bug is unsafe gets().
-- Blacklisting only execve syscall is incomplete as a generic mitigation.
-- Prefer bounded input APIs and defense-in-depth (canaries, NX, ASLR, seccomp allowlists).
-

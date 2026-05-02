@@ -53,7 +53,6 @@ static int auth(char *login, unsigned int serial) {
     }
 
     hash = ((uint32_t)(unsigned char)login[3] ^ 0x1337U) + 0x5eededU;
-    printf("hash: %u\n", hash);
     for (index = 0; index < login_len; index++) {
         unsigned char current;
         uint32_t mixed;
@@ -66,8 +65,7 @@ static int auth(char *login, unsigned int serial) {
         mixed = ((uint32_t)(signed char)current) ^ hash;
         hash += mixed % 1337U;
     }
-printf("serial: %u\n", serial);
-printf("hash: %u\n", hash);
+    printf("hash: %u\n", hash);
     if (serial != hash) {
         return 1;
     }

