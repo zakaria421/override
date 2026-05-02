@@ -31,7 +31,7 @@ void set_username(message_ctx *ctx) {
     }
 
     index = 0;
-    while (index <= 0x28 && input[index] != '\0') {
+    while (index <= 0x28 && input[index] != '\0') { // copies 41 bytes into 40-byte username buffer
         ctx->username[index] = input[index];
         index += 1;
     }
