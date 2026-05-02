@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static char g_user_name[0x100];
+static char g_user_name[256];
 
 static int verify_user_name(void) {
     puts("verifying username....\n");
@@ -13,7 +13,7 @@ static int verify_user_pass(const char *input) {
 }
 
 int main(void) {
-    char local_buffer[0x40];
+    char local_buffer[64];
     int status;
 
     memset(local_buffer, 0, sizeof(local_buffer));
@@ -21,7 +21,7 @@ int main(void) {
 
     puts("********* ADMIN LOGIN PROMPT *********");
     printf("Enter Username: ");
-    fgets(g_user_name, 0x100, stdin);
+    fgets(g_user_name, 256, stdin);
 
     status = verify_user_name();
     if (status != 0) {
@@ -30,7 +30,7 @@ int main(void) {
     }
 
     puts("Enter Password: ");
-    fgets(local_buffer, 0x64, stdin);
+    fgets(local_buffer, 100, stdin);
 
     status = verify_user_pass(local_buffer);
     if (status == 0) {

