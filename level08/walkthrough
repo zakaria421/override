@@ -54,8 +54,4 @@ Resolution summary:
 - Recovered value:
 	- `fjAwpJNs2vvkFLRebEvAQ2hFZ4uQBWfHRsP62d8S`
 
-5) Notes for defense/evaluation:
-- Root issue is path traversal in file copy logic.
-- Must canonicalize and validate both source and destination paths.
-- Do not build privileged destination from untrusted filename input.
 

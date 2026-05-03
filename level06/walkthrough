@@ -54,8 +54,5 @@ Vulnerability type:
 - Recovered value:
 	- `GbcPDRgsFK77LNnnuh7QyFYA2942Gp8yKj9KrWD8`
 
-5) Notes for defense/evaluation:
-- Anti-debugging (`ptrace`) is not enough if auth formula is reversible.
-- Fix by using server-side secret/HMAC or cryptographic verification.
-- Avoid deriving valid credentials entirely from user-controlled input.
+example : zakaria: 6233788
 
